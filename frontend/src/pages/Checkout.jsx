@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useCart } from '../context/CartContext';
 import { useAuth } from '../context/AuthContext';
@@ -10,6 +10,7 @@ import Button from '../components/ui/Button';
 export default function Checkout() {
   const { items, total } = useCart();
   const { user } = useAuth();
+  const [bundles, setBundles] = useState([]);
   const [shipping, setShipping] = useState({
     fullName: user?.name || '',
     addressLine1: '',
@@ -24,11 +25,27 @@ export default function Checkout() {
   const [couponCode, setCouponCode] = useState('');
   const [appliedCoupon, setAppliedCoupon] = useState(null);
   const [couponError, setCouponError] = useState('');
+  const [redeemPoints, setRedeemPoints] = useState(0);
+
+  useEffect(() => {
+    api.get('/bundles').then((res) => setBundles(res.data.items || [])).catch(() => {});
+  }, []);
 
   const discountAmount = appliedCoupon
     ? (total * appliedCoupon.discountPercentage) / 100
     : 0;
-  const totalAfterDiscount = total - discountAmount;
+  const bundleDiscount = bundles.reduce((sum, b) => {
+    const hasAll = (b.products || []).every((bp) => items.some((i) => i.product._id === bp._id));
+    if (!hasAll) return sum;
+    const bundleSubtotal = items
+      .filter((i) => (b.products || []).some((bp) => bp._id === i.product._id))
+      .reduce((s, i) => s + i.product.price * i.quantity, 0);
+    return sum + ((bundleSubtotal * (b.discountPercentage || 0)) / 100);
+  }, 0);
+  const subtotalAfterDeals = Math.max(0, total - discountAmount - bundleDiscount);
+  const maxPointRedeemValue = Math.min(subtotalAfterDeals, (user?.loyaltyPoints || 0) * 0.1);
+  const redeemedValue = Math.min(Number(redeemPoints || 0) * 0.1, maxPointRedeemValue);
+  const totalAfterDiscount = subtotalAfterDeals - redeemedValue;
 
   const applyCoupon = async () => {
     if (!couponCode.trim()) return;
@@ -52,7 +69,8 @@ export default function Checkout() {
         shippingAddress: shipping,
         successUrl: `${baseUrl}/checkout/success`,
         cancelUrl: `${baseUrl}/checkout`,
-        couponCode: appliedCoupon ? appliedCoupon.code : couponCode.trim() || undefined
+        couponCode: appliedCoupon ? appliedCoupon.code : couponCode.trim() || undefined,
+        redeemPoints: Number(redeemPoints) || 0
       });
       window.location.href = res.data.url;
     } catch (err) {
@@ -109,6 +127,25 @@ export default function Checkout() {
                 <span>-${discountAmount.toFixed(2)}</span>
               </div>
             )}
+            {bundleDiscount > 0 && (
+              <div className="flex items-center justify-between mb-1 text-green-700">
+                <span>Bundle Deals</span>
+                <span>-${bundleDiscount.toFixed(2)}</span>
+              </div>
+            )}
+            <div className="mt-3 rounded-xl border border-beige/60 bg-cream/60 p-3">
+              <p className="text-xs text-deep/70 mb-1">Loyalty Points: {user?.loyaltyPoints || 0}</p>
+              <input
+                type="number"
+                min="0"
+                max={user?.loyaltyPoints || 0}
+                value={redeemPoints}
+                onChange={(e) => setRedeemPoints(e.target.value)}
+                className="w-full rounded-lg border border-beige/70 px-3 py-2 text-sm"
+                placeholder="Redeem points"
+              />
+              {redeemedValue > 0 && <p className="mt-1 text-xs text-green-700">Redeemed -${redeemedValue.toFixed(2)}</p>}
+            </div>
             <div className="flex items-center justify-between mt-2 pt-2 border-t border-beige/60">
               <span className="text-deep/80 font-medium">Total</span>
               <span className="font-semibold text-deep">${totalAfterDiscount.toFixed(2)}</span>

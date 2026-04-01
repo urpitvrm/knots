@@ -1,5 +1,7 @@
 const Order = require('../models/Order');
 const Product = require('../models/Product');
+const User = require('../models/User');
+const { pushNotification, pushNotificationToAdmins, emitRealtimeEvent } = require('../services/realtimeService');
 
 async function createOrder(req, res, next) {
   try {
@@ -38,8 +40,23 @@ async function createOrder(req, res, next) {
       products,
       totalPrice,
       shippingAddress,
-      orderStatus: 'pending'
+      orderStatus: 'pending',
+      loyalty: { pointsEarned: Math.floor(totalPrice), pointsRedeemed: 0 }
     });
+    await User.findByIdAndUpdate(req.user._id, { $inc: { loyaltyPoints: Math.floor(totalPrice) } });
+    await pushNotification(req.user._id, {
+      type: 'new_order',
+      title: 'Order placed',
+      message: `Your order #${order._id.toString().slice(-6)} has been placed.`,
+      meta: { orderId: String(order._id) }
+    });
+    await pushNotificationToAdmins({
+      type: 'new_order',
+      title: 'New order received',
+      message: `Order #${order._id.toString().slice(-6)} was created.`,
+      orderId: String(order._id)
+    });
+    emitRealtimeEvent('admins', 'new_order', order);
     res.status(201).json({ success: true, order });
   } catch (err) {
     next(err);
@@ -84,15 +101,32 @@ async function updateOrderStatus(req, res, next) {
       err.status = 404;
       throw err;
     }
+    await pushNotification(order.user._id, {
+      type: 'order_update',
+      title: 'Order status updated',
+      message: `Your order is now ${status}.`,
+      meta: { orderId: String(order._id), status }
+    });
+    emitRealtimeEvent(order.user._id, 'order_update', { orderId: String(order._id), status });
     res.json({ success: true, order });
   } catch (err) {
     next(err);
   }
 }
 
+function estimateDelivery(req, res) {
+  const country = (req.query.country || '').toLowerCase();
+  let estimate = 'Delivery in 5-7 days';
+  if (['india', 'in'].includes(country)) estimate = 'Delivery in 3-5 days';
+  if (['us', 'usa', 'united states'].includes(country)) estimate = 'Delivery in 5-8 days';
+  if (['uk', 'united kingdom'].includes(country)) estimate = 'Delivery in 6-9 days';
+  res.json({ success: true, estimate });
+}
+
 module.exports = {
   createOrder,
   getUserOrders,
   getAllOrders,
-  updateOrderStatus
+  updateOrderStatus,
+  estimateDelivery
 };

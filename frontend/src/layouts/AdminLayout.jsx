@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link, Outlet, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
 
@@ -7,11 +7,15 @@ const navItems = [
   { to: '/admin/products', label: 'Manage Products' },
   { to: '/admin/orders', label: 'Manage Orders' },
   { to: '/admin/users', label: 'Manage Users' },
-  { to: '/admin/coupons', label: 'Coupons' }
+  { to: '/admin/coupons', label: 'Coupons' },
+  { to: '/admin/chats', label: 'Chats' },
+  { to: '/admin/custom-orders', label: 'Custom Orders' },
+  { to: '/admin/bundles', label: 'Bundles' }
 ];
 
 export default function AdminLayout({ children }) {
   const location = useLocation();
+  const [menuOpen, setMenuOpen] = useState(false);
 
   return (
     <div className="min-h-screen bg-cream font-body">
@@ -30,13 +34,21 @@ export default function AdminLayout({ children }) {
           animate={{ opacity: 1 }}
           transition={{ duration: 0.3 }}
         >
-          <aside className="w-full md:w-60 flex-shrink-0">
-            <nav className="rounded-2xl border border-beige/60 bg-white shadow-soft p-4 h-fit sticky top-24">
-              <ul className="flex flex-row md:flex-col gap-1 overflow-x-auto md:overflow-visible">
+          <div className="w-full md:w-60 flex-shrink-0">
+            <button
+              type="button"
+              onClick={() => setMenuOpen((prev) => !prev)}
+              className="w-full rounded-xl border border-beige/60 bg-white px-4 py-3 text-left text-sm font-semibold text-deep shadow-soft md:hidden"
+            >
+              {menuOpen ? 'Close Admin Menu' : 'Open Admin Menu'}
+            </button>
+            <nav className={`mt-2 rounded-2xl border border-beige/60 bg-white shadow-soft p-3 ${menuOpen ? 'block' : 'hidden'} md:block md:mt-0 md:p-4 md:sticky md:top-24`}>
+              <ul className="flex flex-col gap-1">
                 {navItems.map(({ to, label }) => (
                   <li key={to}>
                     <Link
                       to={to}
+                      onClick={() => setMenuOpen(false)}
                       className={`block rounded-xl px-4 py-2.5 text-sm font-medium transition ${
                         location.pathname === to || (to !== '/admin' && location.pathname.startsWith(to))
                           ? 'bg-accent/15 text-accent'
@@ -49,7 +61,7 @@ export default function AdminLayout({ children }) {
                 ))}
               </ul>
             </nav>
-          </aside>
+          </div>
           <section className="flex-1 min-w-0">
             {children || <Outlet />}
           </section>

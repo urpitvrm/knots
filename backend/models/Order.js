@@ -31,6 +31,10 @@ const orderSchema = new mongoose.Schema(
       provider: { type: String },
       sessionId: { type: String, index: true },
       amount: { type: Number, min: 0 }
+    },
+    loyalty: {
+      pointsEarned: { type: Number, default: 0, min: 0 },
+      pointsRedeemed: { type: Number, default: 0, min: 0 }
     }
   },
   { timestamps: { createdAt: 'createdAt', updatedAt: 'updatedAt' } }

@@ -2,6 +2,10 @@ const Stripe = require('stripe');
 const Product = require('../models/Product');
 const Order = require('../models/Order');
 const Coupon = require('../models/Coupon');
+const User = require('../models/User');
+const { pushNotification, pushNotificationToAdmins, emitRealtimeEvent } = require('../services/realtimeService');
+
+const POINT_VALUE_USD = 0.1;
 
 const secretKey = process.env.STRIPE_SECRET_KEY;
 const stripe =
@@ -16,7 +20,7 @@ async function createCheckoutSession(req, res, next) {
       err.status = 503;
       throw err;
     }
-    const { products, shippingAddress, successUrl, cancelUrl, couponCode } = req.body;
+    const { products, shippingAddress, successUrl, cancelUrl, couponCode, redeemPoints = 0 } = req.body;
 
     if (!Array.isArray(products) || products.length === 0) {
       const err = new Error('Checkout requires at least one product');
@@ -29,8 +33,8 @@ async function createCheckoutSession(req, res, next) {
     });
     const productMap = new Map(productDocs.map((p) => [String(p._id), p]));
 
-    let totalPrice = 0;
-    const lineItems = products.map((p) => {
+    let subtotal = 0;
+    const validatedItems = products.map((p) => {
       const prod = productMap.get(String(p.product));
       if (!prod) {
         const err = new Error('One or more products not found');
@@ -42,21 +46,19 @@ async function createCheckoutSession(req, res, next) {
         err.status = 400;
         throw err;
       }
-      const lineTotal = prod.price * p.quantity;
-      totalPrice += lineTotal;
-      return {
-        price_data: {
-          currency: 'usd',
-          product_data: {
-            name: prod.name
-          },
-          unit_amount: Math.round(prod.price * 100)
-        },
-        quantity: p.quantity
-      };
+      const quantity = Number(p.quantity);
+      if (!Number.isInteger(quantity) || quantity <= 0) {
+        const err = new Error(`Invalid quantity for ${prod.name}`);
+        err.status = 400;
+        throw err;
+      }
+      const unitAmount = Math.round(prod.price * 100);
+      subtotal += unitAmount * quantity;
+      return { product: prod, quantity, unitAmount };
     });
 
     let discountPercentage = 0;
+    let appliedCouponCode = null;
     if (couponCode && couponCode.trim()) {
       const coupon = await Coupon.findOne({
         code: couponCode.trim().toUpperCase(),
@@ -64,22 +66,35 @@ async function createCheckoutSession(req, res, next) {
       });
       if (coupon) {
         discountPercentage = coupon.discountPercentage;
-        const discountCents = Math.round((totalPrice * discountPercentage / 100) * 100);
-        if (discountCents > 0) {
-          lineItems.push({
-            price_data: {
-              currency: 'usd',
-              product_data: {
-                name: `Discount (${coupon.code})`
-              },
-              unit_amount: -discountCents
-            },
-            quantity: 1
-          });
-          totalPrice = totalPrice - (discountCents / 100);
-        }
+        appliedCouponCode = coupon.code;
       }
     }
+
+    const multiplier = Math.max(0, 1 - (discountPercentage / 100));
+    const lineItems = validatedItems.map((item) => {
+      const discountedUnitAmount = Math.max(0, Math.round(item.unitAmount * multiplier));
+      return {
+        price_data: {
+          currency: 'usd',
+          product_data: {
+            name: item.product.name
+          },
+          unit_amount: discountedUnitAmount
+        },
+        quantity: item.quantity
+      };
+    });
+    const discountedTotalCents = lineItems.reduce((sum, item) => sum + (item.price_data.unit_amount * item.quantity), 0);
+    const user = await User.findById(req.user._id).select('loyaltyPoints');
+    const safeRedeemPoints = Math.max(0, Number(redeemPoints) || 0);
+    const maxRedeemablePoints = Math.min(
+      user?.loyaltyPoints || 0,
+      Math.floor(discountedTotalCents / Math.round(POINT_VALUE_USD * 100))
+    );
+    const redeemedPoints = Math.min(safeRedeemPoints, maxRedeemablePoints);
+    const redeemedAmountCents = redeemedPoints * Math.round(POINT_VALUE_USD * 100);
+    const totalPriceCents = Math.max(0, discountedTotalCents - redeemedAmountCents);
+    const totalPrice = totalPriceCents / 100;
 
     const session = await stripe.checkout.sessions.create({
       mode: 'payment',
@@ -92,7 +107,11 @@ async function createCheckoutSession(req, res, next) {
         userId: String(req.user._id),
         products: JSON.stringify(products),
         shippingAddress: JSON.stringify(shippingAddress || {}),
-        totalPrice: String(totalPrice)
+        totalPrice: String(totalPrice),
+        subtotal: String(subtotal / 100),
+        discountPercentage: String(discountPercentage),
+        couponCode: appliedCouponCode || '',
+        redeemedPoints: String(redeemedPoints)
       }
     });
 
@@ -163,18 +182,42 @@ async function confirmCheckoutSession(req, res, next) {
       await Product.findByIdAndUpdate(p.product, { $inc: { stock: -p.quantity } });
     }
 
+    const redeemedPoints = Number(session.metadata.redeemedPoints || 0);
+    const finalAmount = Number(session.metadata.totalPrice || totalPrice);
     const order = await Order.create({
       user: userId,
       products,
-      totalPrice,
+      totalPrice: finalAmount,
       shippingAddress,
       orderStatus: 'processing',
+      loyalty: {
+        pointsEarned: Math.floor(finalAmount),
+        pointsRedeemed: redeemedPoints
+      },
       payment: {
         provider: 'stripe',
         sessionId: session.id,
-        amount: totalPrice
+        amount: finalAmount
       }
     });
+
+    const pointsEarned = Math.floor(finalAmount);
+    await User.findByIdAndUpdate(userId, {
+      $inc: { loyaltyPoints: pointsEarned - redeemedPoints }
+    });
+    await pushNotification(userId, {
+      type: 'order_update',
+      title: 'Order placed',
+      message: `Your order has been confirmed. You earned ${pointsEarned} points.`,
+      meta: { orderId: String(order._id), status: order.orderStatus }
+    });
+    await pushNotificationToAdmins({
+      type: 'new_order',
+      title: 'New order received',
+      message: `A new order was placed by ${session.customer_email || 'customer'}.`,
+      orderId: String(order._id)
+    });
+    emitRealtimeEvent('admins', 'new_order', order);
 
     res.status(201).json({ success: true, order });
   } catch (err) {

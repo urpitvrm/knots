@@ -1,13 +1,16 @@
 require('dotenv').config();
 const path = require('path');
 const fs = require('fs');
+const http = require('http');
 const express = require('express');
 const cors = require('cors');
 const morgan = require('morgan');
 const { connectDB } = require('./config/db');
 const { errorHandler } = require('./middleware/errorHandler');
+const { initSocket } = require('./socket/socketServer');
 
 const app = express();
+const server = http.createServer(app);
 
 // Config
 const PORT = process.env.PORT || 5000;
@@ -46,6 +49,11 @@ app.use('/api/coupons', require('./routes/couponRoutes'));
 app.use('/api/newsletter', require('./routes/newsletterRoutes'));
 app.use('/api', require('./routes/uploadRoutes'));
 app.use('/api/payments', require('./routes/paymentRoutes'));
+app.use('/api/chat', require('./routes/chatRoutes'));
+app.use('/api/custom-orders', require('./routes/customOrderRoutes'));
+app.use('/api/notifications', require('./routes/notificationRoutes'));
+app.use('/api/bundles', require('./routes/bundleRoutes'));
+app.use('/api/gallery', require('./routes/galleryRoutes'));
 
 // Error handler
 app.use(errorHandler);
@@ -54,13 +62,14 @@ app.use(errorHandler);
 (async () => {
   try {
     await connectDB(process.env.MONGO_URI);
+    initSocket(server);
     // Optional seed on start
     if (process.env.SEED_ON_START === 'true') {
       // Lazy import to avoid circular deps
       // eslint-disable-next-line global-require
       await require('./seed/seed').seed();
     }
-    app.listen(PORT, () => {
+    server.listen(PORT, () => {
       // eslint-disable-next-line no-console
       console.log(`CozyLoops API running on http://localhost:${PORT}`);
     });

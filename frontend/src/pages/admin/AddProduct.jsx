@@ -11,24 +11,32 @@ export default function AddProduct() {
     price: '',
     category: '',
     stock: 0,
+    materials: '',
+    timeToMake: '',
+    story: '',
     images: []
   });
-  const [imageFile, setImageFile] = useState(null);
+  const [imageFiles, setImageFiles] = useState([]);
   const [message, setMessage] = useState('');
 
   useEffect(() => {
     api.get('/categories').then((res) => setCategories(res.data.categories));
   }, []);
 
-  const uploadImage = async () => {
-    if (!imageFile) return;
+  const uploadImages = async () => {
+    if (!imageFiles.length) return;
     const data = new FormData();
-    data.append('image', imageFile);
-    const res = await api.post('/upload', data, {
+    imageFiles.forEach((file) => data.append('images', file));
+    const res = await api.post('/upload/product-images', data, {
       headers: { 'Content-Type': 'multipart/form-data' }
     });
-    setForm((f) => ({ ...f, images: [...f.images, res.data.url] }));
-    setImageFile(null);
+    const urls = res.data.urls || [];
+    setForm((f) => ({ ...f, images: [...f.images, ...urls] }));
+    setImageFiles([]);
+  };
+
+  const removeImageAt = (index) => {
+    setForm((f) => ({ ...f, images: f.images.filter((_, i) => i !== index) }));
   };
 
   const onSubmit = async (e) => {
@@ -41,7 +49,17 @@ export default function AddProduct() {
         stock: Number(form.stock)
       });
       setMessage('Product created!');
-      setForm({ name: '', description: '', price: '', category: '', stock: 0, images: [] });
+      setForm({
+        name: '',
+        description: '',
+        price: '',
+        category: '',
+        stock: 0,
+        materials: '',
+        timeToMake: '',
+        story: '',
+        images: []
+      });
     } catch (err) {
       setMessage(err.response?.data?.message || 'Failed to create');
     }
@@ -90,16 +108,52 @@ export default function AddProduct() {
           onChange={(e) => setForm({ ...form, stock: e.target.value })}
           className="border rounded-xl px-4 py-3"
         />
+        <input
+          placeholder="Materials (e.g. Cotton yarn, wooden beads)"
+          value={form.materials}
+          onChange={(e) => setForm({ ...form, materials: e.target.value })}
+          className="border rounded-xl px-4 py-3"
+        />
+        <input
+          placeholder="Time to make (e.g. 2-3 days)"
+          value={form.timeToMake}
+          onChange={(e) => setForm({ ...form, timeToMake: e.target.value })}
+          className="border rounded-xl px-4 py-3"
+        />
+        <textarea
+          placeholder="Story"
+          value={form.story}
+          onChange={(e) => setForm({ ...form, story: e.target.value })}
+          className="border rounded-xl px-4 py-3"
+        />
 
-        <div className="flex items-center gap-3">
-          <input type="file" onChange={(e) => setImageFile(e.target.files[0])} />
-          <button type="button" className="btn btn-secondary" onClick={uploadImage}>
-            Upload image
-          </button>
+        <div className="flex flex-col gap-2">
+          <span className="text-sm text-gray-600">Product images (select multiple, then upload)</span>
+          <div className="flex items-center gap-3 flex-wrap">
+            <input
+              type="file"
+              accept="image/jpeg,image/png,image/webp,image/gif"
+              multiple
+              onChange={(e) => setImageFiles(Array.from(e.target.files || []))}
+            />
+            <button type="button" className="btn btn-secondary" onClick={uploadImages} disabled={!imageFiles.length}>
+              Upload to gallery
+            </button>
+          </div>
         </div>
-        <div className="flex gap-3">
-          {form.images.map((url) => (
-            <img key={url} src={getImageUrl(url)} alt="" className="w-20 h-20 rounded-xl object-cover" />
+        <div className="flex gap-3 flex-wrap">
+          {form.images.map((url, idx) => (
+            <div key={`${url}-${idx}`} className="relative group">
+              <img src={getImageUrl(url)} alt="" className="w-20 h-20 rounded-xl object-cover" />
+              <button
+                type="button"
+                className="absolute -top-2 -right-2 w-7 h-7 rounded-full bg-red-500 text-white text-xs opacity-90 hover:opacity-100"
+                onClick={() => removeImageAt(idx)}
+                aria-label="Remove image"
+              >
+                ×
+              </button>
+            </div>
           ))}
         </div>
 

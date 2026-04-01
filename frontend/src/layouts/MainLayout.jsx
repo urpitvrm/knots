@@ -4,6 +4,7 @@ import { motion } from 'framer-motion';
 import Navbar from '../components/Navbar';
 import Footer from '../components/Footer';
 import { pageVariants, pageTransition } from '../utils/motion';
+import ChatWidget from '../components/chat/ChatWidget';
 
 export default function MainLayout({ children }) {
   const content = children ?? <Outlet />;
@@ -21,6 +22,7 @@ export default function MainLayout({ children }) {
         {content}
       </motion.main>
       <Footer />
+      <ChatWidget />
     </div>
   );
 }

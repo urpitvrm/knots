@@ -1,7 +1,8 @@
 const multer = require('multer');
 const path = require('path');
+const { isConfigured } = require('../config/cloudinary');
 
-const storage = multer.diskStorage({
+const diskStorage = multer.diskStorage({
   destination: (req, file, cb) => {
     cb(null, path.join(__dirname, '..', 'uploads'));
   },
@@ -20,6 +21,8 @@ function fileFilter(req, file, cb) {
     cb(new Error('Only image files are allowed'));
   }
 }
+
+const storage = isConfigured() ? multer.memoryStorage() : diskStorage;
 
 const upload = multer({
   storage,

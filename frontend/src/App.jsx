@@ -14,6 +14,8 @@ import CheckoutSuccess from './pages/CheckoutSuccess';
 import MyOrders from './pages/MyOrders';
 import Profile from './pages/Profile';
 import Wishlist from './pages/Wishlist';
+import CustomOrder from './pages/CustomOrder';
+import Gallery from './pages/Gallery';
 import ProtectedRoute from './components/ProtectedRoute';
 import AdminRoute from './components/AdminRoute';
 import Dashboard from './pages/admin/Dashboard';
@@ -23,6 +25,9 @@ import EditProduct from './pages/admin/EditProduct';
 import ManageOrders from './pages/admin/ManageOrders';
 import ManageUsers from './pages/admin/ManageUsers';
 import ManageCoupons from './pages/admin/ManageCoupons';
+import ChatDashboard from './pages/admin/ChatDashboard';
+import ManageCustomOrders from './pages/admin/ManageCustomOrders';
+import ManageBundles from './pages/admin/ManageBundles';
 
 export default function App() {
   return (
@@ -38,11 +43,13 @@ export default function App() {
         <Route path="/signup" element={<Signup />} />
         <Route path="/checkout/success" element={<CheckoutSuccess />} />
         <Route path="/wishlist" element={<Wishlist />} />
+        <Route path="/gallery" element={<Gallery />} />
         <Route element={<ProtectedRoute />}>
           <Route path="/cart" element={<Cart />} />
           <Route path="/checkout" element={<Checkout />} />
           <Route path="/orders" element={<MyOrders />} />
           <Route path="/profile" element={<Profile />} />
+          <Route path="/custom-order" element={<CustomOrder />} />
         </Route>
       </Route>
       {/* Admin */}
@@ -54,6 +61,9 @@ export default function App() {
         <Route path="/admin/orders" element={<ManageOrders />} />
         <Route path="/admin/users" element={<ManageUsers />} />
         <Route path="/admin/coupons" element={<ManageCoupons />} />
+        <Route path="/admin/chats" element={<ChatDashboard />} />
+        <Route path="/admin/custom-orders" element={<ManageCustomOrders />} />
+        <Route path="/admin/bundles" element={<ManageBundles />} />
       </Route>
     </Routes>
   );

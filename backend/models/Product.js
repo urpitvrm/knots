@@ -8,6 +8,9 @@ const productSchema = new mongoose.Schema(
     category: { type: mongoose.Schema.Types.ObjectId, ref: 'Category', required: true },
     images: [{ type: String }],
     stock: { type: Number, default: 0, min: 0 },
+    materials: { type: String, default: '' },
+    timeToMake: { type: String, default: '' },
+    story: { type: String, default: '' },
     averageRating: { type: Number, default: 0, min: 0, max: 5 },
     reviewCount: { type: Number, default: 0 }
   },

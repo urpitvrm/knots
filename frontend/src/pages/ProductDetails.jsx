@@ -22,10 +22,29 @@ export default function ProductDetails() {
   const [reviewText, setReviewText] = useState('');
   const [reviewSubmitting, setReviewSubmitting] = useState(false);
   const [reviewError, setReviewError] = useState('');
+  const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const [deliveryEstimate, setDeliveryEstimate] = useState('');
   const { addToCart } = useCart();
 
   useEffect(() => {
     api.get(`/products/${id}`).then((res) => setProduct(res.data.item));
+  }, [id]);
+
+  useEffect(() => {
+    if (!id || !user) return;
+    api.post(`/products/${id}/recently-viewed`).catch(() => {});
+  }, [id, user]);
+
+  useEffect(() => {
+    if (!user) return;
+    api
+      .get('/orders/delivery/estimate', { params: { country: user.country || 'IN' } })
+      .then((res) => setDeliveryEstimate(res.data.estimate))
+      .catch(() => setDeliveryEstimate('Delivery in 3-5 days'));
+  }, [user]);
+
+  useEffect(() => {
+    setActiveImageIndex(0);
   }, [id]);
 
   useEffect(() => {
@@ -64,15 +83,34 @@ export default function ProductDetails() {
     );
   }
 
+  const imageList = (product.images || []).filter(Boolean);
+  const thumbIndex =
+    imageList.length > 0 ? Math.min(activeImageIndex, imageList.length - 1) : 0;
+  const mainSrc =
+    getImageUrl(imageList[thumbIndex]) ||
+    'https://via.placeholder.com/600x600?text=CozyLoops';
+
   return (
     <div className="max-w-6xl mx-auto px-4 py-10">
       <div className="grid md:grid-cols-2 gap-10">
         <motion.div initial={{ opacity: 0, x: -12 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.4 }}>
-          <img
-            src={getImageUrl(product.images?.[0]) || 'https://via.placeholder.com/600x600?text=CozyLoops'}
-            alt={product.name}
-            className="rounded-2xl shadow-soft w-full object-cover"
-          />
+          <img src={mainSrc} alt={product.name} className="rounded-2xl shadow-soft w-full object-cover aspect-square max-h-[560px]" />
+          {imageList.length > 1 && (
+            <div className="flex gap-2 mt-4 flex-wrap">
+              {imageList.map((src, i) => (
+                <button
+                  key={`${src}-${i}`}
+                  type="button"
+                  onClick={() => setActiveImageIndex(i)}
+                  className={`rounded-xl overflow-hidden border-2 transition ${
+                    i === thumbIndex ? 'border-accent ring-2 ring-accent/30' : 'border-beige/60 opacity-80 hover:opacity-100'
+                  }`}
+                >
+                  <img src={getImageUrl(src)} alt="" className="w-16 h-16 object-cover" />
+                </button>
+              ))}
+            </div>
+          )}
         </motion.div>
         <motion.div initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.4 }}>
           <h1 className="text-3xl font-semibold text-deep font-display">{product.name}</h1>
@@ -84,6 +122,15 @@ export default function ProductDetails() {
           )}
           <p className="text-deep/70 mt-2 leading-relaxed">{product.description}</p>
           <div className="mt-4 text-2xl font-bold text-deep">${product.price.toFixed(2)}</div>
+          {deliveryEstimate && <p className="mt-2 text-sm text-deep/70">{deliveryEstimate} 🚚</p>}
+          {(product.materials || product.timeToMake || product.story) && (
+            <div className="mt-5 rounded-2xl border border-beige/60 bg-cream/60 p-4 text-sm text-deep/80">
+              <h3 className="mb-2 font-semibold text-deep">Product Story</h3>
+              {product.materials && <p><span className="font-medium">Materials:</span> {product.materials}</p>}
+              {product.timeToMake && <p><span className="font-medium">Time to make:</span> {product.timeToMake}</p>}
+              {product.story && <p className="mt-1">{product.story}</p>}
+            </div>
+          )}
           {product.stock <= 0 && <p className="mt-2 text-red-600 text-sm">Out of stock</p>}
           <div className="mt-6 flex items-center gap-4">
             <input

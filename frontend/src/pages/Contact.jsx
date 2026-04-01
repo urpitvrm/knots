@@ -6,7 +6,7 @@ import Button from '../components/ui/Button';
 
 export default function Contact() {
   return (
-    <div className="max-w-4xl mx-auto px-4 py-12">
+    <div className="w-full max-w-4xl mx-auto px-3 sm:px-4 lg:px-5 py-12">
       <motion.div
         initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
